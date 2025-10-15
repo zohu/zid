@@ -5,7 +5,7 @@
 > Supports **fully customizable bit layout**\
 > Balances flexibility and high availability.
 
-[中文文档](https://github.com/zohu/zid/blob/master/README_CN.md)
+[中文文档](https://github.com/zohu/zid/blob/main/README_ZH.md)
 
 ### 🔑 Use this library if you have any of the following requirements:
 
