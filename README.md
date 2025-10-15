@@ -103,26 +103,30 @@ zid.WithOptions(&Options{
 #### 4. Automatic WorkerId Assignment (Distributed Scenarios)
 
 ✅ **Built-in Redis-based Auto Assignment** (recommended for bare metal or Docker):
-
+```shell
+go get -u github.com/zohu/zidredis
+```
 ```go
 zid.WithOptionsAndWorkerManager(
-    zid.NewRedisManager(r redis.UniversalClient),
+    zidredis.NewRedisManager(r redis.UniversalClient),
     &zid.Options{},
 )
 id := zid.NextId()
 
 // You can also specify a key prefix
 zid.WithOptionsAndWorkerManager(
-    zid.NewRedisManager(r redis.UniversalClient, "zid"),
+    zidredis.NewRedisManager(r redis.UniversalClient, "zid"),
     &zid.Options{},
 )
 ```
 
 ✅ **Built-in Kubernetes Lease + TTL Auto Cleanup** (recommended for Kubernetes):
-
+```shell
+go get -u github.com/zohu/zidk8s
+```
 ```go
 zid.WithOptionsAndWorkerManager(
-    zid.NewKubernetesManager(&zid.KubernetesOptions{
+    zidk8s.NewKubernetesManager(&zid.KubernetesOptions{
         PodUID          string // Auto-read from POD_UID env var if unset
         Namespace       string // Auto-read from NAMESPACE env var if unset
         LeaseNamePrefix string // Defaults to "snowflake-" if unset

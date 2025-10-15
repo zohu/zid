@@ -93,24 +93,30 @@ zid.WithOptions(&Options{
 
 #### 4. 自动分配 WorkerId（分布式场景）
 ✅ **内置 Redis 自动分配**（裸机或docker推荐）：
+```shell
+go get -u github.com/zohu/zidredis
+```
 ```go
 zid.WithOptionsAndWorkerManager(
-    zid.NewRedisManager(r redis.UniversalClient),
+    zidredis.NewRedisManager(r redis.UniversalClient),
     &zid.Options{},
 )
 id := zid.NextId()
 
 // 也可以指定前缀
 zid.WithOptionsAndWorkerManager(
-    zid.NewRedisManager(r redis.UniversalClient, "zid"),
+    zidredis.NewRedisManager(r redis.UniversalClient, "zid"),
     &zid.Options{},
 )
 ```
 
 ✅ **内置基于 Kubernetes Lease（租约） + TTL 自动清理**（Kubernetes推荐）：
+```shell
+go get -u github.com/zohu/zidk8s
+```
 ```go
 zid.WithOptionsAndWorkerManager(
-    zid.NewKubernetesManager(&zid.KubernetesOptions{
+    zidk8s.NewKubernetesManager(&zid.KubernetesOptions{
         PodUID          string // 未设置则自动获取环境变量POD_UID
         Namespace       string // 未设置则自动获取环境变量NAMESPACE
         LeaseNamePrefix string // 未设置则默认"snowflake-"
