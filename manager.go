@@ -38,8 +38,8 @@ func WithOptionsAndWorkerManager(manager WorkerIdManager, options *Options) erro
 	WithOptions(options)
 
 	// 启动续约
+	go manager.StartRenewal()
 	go func() {
-		manager.StartRenewal()
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 		<-sigCh
