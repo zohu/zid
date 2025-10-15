@@ -1,6 +1,6 @@
 ## 🌟 Enhanced Snowflake ID Generator
 
-> A high-performance, zero-allocation, low-latency, and customizable Snowflake ID generation library\
+> A high-performance, zero-allocation, zero-dependency, low-latency, and customizable Snowflake ID generation library\
 > **Deeply optimized clock drift handling**\
 > Supports **fully customizable bit layout**\
 > Balances flexibility and high availability.
