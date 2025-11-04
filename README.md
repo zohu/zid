@@ -104,7 +104,7 @@ zid.WithOptions(&Options{
 
 ✅ **Built-in Redis-based Auto Assignment** (recommended for bare metal or Docker):
 ```shell
-go get -u github.com/zohu/zidredis
+go get -u github.com/zohu/zid/zidredis
 ```
 ```go
 zid.WithOptionsAndWorkerManager(
@@ -122,7 +122,7 @@ zid.WithOptionsAndWorkerManager(
 
 ✅ **Built-in Kubernetes Lease + TTL Auto Cleanup** (recommended for Kubernetes):
 ```shell
-go get -u github.com/zohu/zidk8s
+go get -u github.com/zohu/zid/zidk8s
 ```
 ```go
 zid.WithOptionsAndWorkerManager(

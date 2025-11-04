@@ -94,7 +94,7 @@ zid.WithOptions(&Options{
 #### 4. 自动分配 WorkerId（分布式场景）
 ✅ **内置 Redis 自动分配**（裸机或docker推荐）：
 ```shell
-go get -u github.com/zohu/zidredis
+go get -u github.com/zohu/zid/zidredis
 ```
 ```go
 zid.WithOptionsAndWorkerManager(
@@ -112,7 +112,7 @@ zid.WithOptionsAndWorkerManager(
 
 ✅ **内置基于 Kubernetes Lease（租约） + TTL 自动清理**（Kubernetes推荐）：
 ```shell
-go get -u github.com/zohu/zidk8s
+go get -u github.com/zohu/zid/zidk8s
 ```
 ```go
 zid.WithOptionsAndWorkerManager(
