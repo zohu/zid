@@ -126,6 +126,10 @@ or overflowing values. String creation allocates; the integer `NextID` path does
 not. Every service that extracts fields from an ID must use the same epoch and
 bit layout that generated it.
 
+Base62 uses the ASCII-ordered alphabet `0-9A-Za-z`. Equal-width encodings retain
+numeric order under bytewise comparison; because the encoding is variable-width,
+lexicographic order across different lengths is not numeric order.
+
 ## How it works
 
 ### ID layout
@@ -471,12 +475,12 @@ All three modules are tagged from the same commit. After the two submodules
 require the target root version and the working tree is committed and clean:
 
 ```shell
-mise release v1.0.0
+mise release v1.0.1
 ```
 
 The task independently runs `go mod tidy -diff`, `go vet`, and race-enabled
-tests for all modules, creates `v1.0.0`, `zidredis/v1.0.0`, and
-`zidk8s/v1.0.0`, then atomically pushes the branch and tags.
+tests for all modules, creates `v1.0.1`, `zidredis/v1.0.1`, and
+`zidk8s/v1.0.1`, then atomically pushes the branch and tags.
 
 ## License
 

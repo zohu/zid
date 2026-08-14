@@ -116,6 +116,9 @@ generatedAt := zid.ExtractTime(parsed)
 字符串生成会分配内存，整数 `NextID` 热路径不会。所有需要提取 ID 字段的服务必须使用
 与生成端一致的纪元和位布局。
 
+Base62 使用按 ASCII 排序的 `0-9A-Za-z` 字母表。同长度编码按字节比较时保持数值顺序；
+由于编码长度可变，不同长度之间的字典序不等同于数值顺序。
+
 ## 工作机制
 
 ### ID 布局
@@ -432,11 +435,11 @@ GOWORK=off go -C zidk8s vet ./...
 工作树干净后执行：
 
 ```shell
-mise release v1.0.0
+mise release v1.0.1
 ```
 
 该任务会独立对三个 module 执行 `go mod tidy -diff`、`go vet` 和 race 测试，创建
-`v1.0.0`、`zidredis/v1.0.0`、`zidk8s/v1.0.0` 三个标签，再原子推送分支与标签。
+`v1.0.1`、`zidredis/v1.0.1`、`zidk8s/v1.0.1` 三个标签，再原子推送分支与标签。
 
 ## License
 

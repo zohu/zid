@@ -7,6 +7,41 @@ import (
 	"testing"
 )
 
+func TestBase62Alphabet(t *testing.T) {
+	tests := []struct {
+		id      int64
+		encoded string
+	}{
+		{0, "0"},
+		{9, "9"},
+		{10, "A"},
+		{35, "Z"},
+		{36, "a"},
+		{61, "z"},
+		{62, "10"},
+	}
+
+	for _, test := range tests {
+		if got := toBase62(test.id); got != test.encoded {
+			t.Errorf("toBase62(%d) = %q, want %q", test.id, got, test.encoded)
+		}
+		if got, err := fromBase62(test.encoded); err != nil || got != test.id {
+			t.Errorf("fromBase62(%q) = %d, %v; want %d", test.encoded, got, err, test.id)
+		}
+	}
+}
+
+func TestBase62EqualWidthValuesSortNumerically(t *testing.T) {
+	previous := toBase62(0)
+	for id := int64(1); id < 62*62*62; id++ {
+		encoded := toBase62(id)
+		if len(previous) == len(encoded) && previous >= encoded {
+			t.Fatalf("numeric order %d < %d encoded as %q >= %q", id-1, id, previous, encoded)
+		}
+		previous = encoded
+	}
+}
+
 func TestBase62RoundTrip(t *testing.T) {
 	for _, id := range []int64{0, 1, 61, 62, 63, 123456789, math.MaxInt64} {
 		encoded := toBase62(id)

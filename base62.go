@@ -6,7 +6,9 @@ import (
 	"math"
 )
 
-const base62Chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+// base62Chars follows ASCII/Unicode code-point order so equal-width encoded
+// values preserve their numeric order under bytewise comparison.
+const base62Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
 var base62Map [256]int8
 
@@ -15,7 +17,7 @@ func init() {
 		base62Map[index] = -1
 	}
 	for index := range len(base62Chars) {
-    base62Map[base62Chars[index]] = int8(index)
+		base62Map[base62Chars[index]] = int8(index)
 	}
 }
 
