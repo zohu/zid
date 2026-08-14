@@ -4,7 +4,7 @@ go 1.25
 
 require (
 	github.com/redis/go-redis/v9 v9.16.0
-	github.com/zohu/zid v0.1.0
+	github.com/zohu/zid v1.0.0
 )
 
 require (

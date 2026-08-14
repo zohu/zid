@@ -471,12 +471,12 @@ All three modules are tagged from the same commit. After the two submodules
 require the target root version and the working tree is committed and clean:
 
 ```shell
-mise release v0.1.0
+mise release v1.0.0
 ```
 
 The task independently runs `go mod tidy -diff`, `go vet`, and race-enabled
-tests for all modules, creates `v0.1.0`, `zidredis/v0.1.0`, and
-`zidk8s/v0.1.0`, then atomically pushes the branch and tags.
+tests for all modules, creates `v1.0.0`, `zidredis/v1.0.0`, and
+`zidk8s/v1.0.0`, then atomically pushes the branch and tags.
 
 ## License
 

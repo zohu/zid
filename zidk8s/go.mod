@@ -3,7 +3,7 @@ module github.com/zohu/zid/zidk8s
 go 1.25
 
 require (
-	github.com/zohu/zid v0.1.0
+	github.com/zohu/zid v1.0.0
 	k8s.io/api v0.34.1
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1

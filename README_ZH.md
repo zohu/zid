@@ -432,11 +432,11 @@ GOWORK=off go -C zidk8s vet ./...
 工作树干净后执行：
 
 ```shell
-mise release v0.1.0
+mise release v1.0.0
 ```
 
 该任务会独立对三个 module 执行 `go mod tidy -diff`、`go vet` 和 race 测试，创建
-`v0.1.0`、`zidredis/v0.1.0`、`zidk8s/v0.1.0` 三个标签，再原子推送分支与标签。
+`v1.0.0`、`zidredis/v1.0.0`、`zidk8s/v1.0.0` 三个标签，再原子推送分支与标签。
 
 ## License
 
