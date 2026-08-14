@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+#MISE description="Validate and atomically release zid, zidredis, and zidk8s"
+#USAGE arg "<version>" help="Canonical Go module version, for example v0.1.0"
+
+set -Eeuo pipefail
+
+usage() {
+	cat <<'EOF'
+Usage: mise release <version>
+
+Examples:
+  mise release v0.1.0
+  mise release 0.1.0
+
+The command validates all three Go modules, creates annotated tags on the
+current commit, and atomically pushes the branch and tags to its upstream.
+EOF
+}
+
+fail() {
+	printf 'release: %s\n' "$*" >&2
+	exit 1
+}
+
+input_version=${usage_version:-}
+if [[ -z $input_version ]]; then
+	if [[ ${1:-} == "-h" || ${1:-} == "--help" ]]; then
+		usage
+		exit 0
+	fi
+
+	[[ $# -eq 1 ]] || {
+		usage >&2
+		exit 2
+	}
+	input_version=$1
+fi
+
+version=${input_version#v}
+version="v${version}"
+
+if [[ ! $version =~ ^v(0|1)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+	fail "version must be canonical Go SemVer (for example v0.1.0 or v1.2.3-rc.1); v2+ requires updating the module paths first"
+fi
+
+for command_name in git go; do
+	command -v "$command_name" >/dev/null 2>&1 || fail "$command_name is required"
+done
+
+task_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repo_root=$(cd -- "$task_dir/../.." && pwd)
+cd -- "$repo_root"
+
+[[ -f go.mod && -f zidredis/go.mod && -f zidk8s/go.mod ]] || fail "run this task from the zid repository"
+
+status=$(git status --porcelain=v1 --untracked-files=all)
+[[ -z $status ]] || fail "working tree must be clean; commit or stash all changes first"
+
+branch=$(git symbolic-ref --quiet --short HEAD) || fail "HEAD must be on a branch"
+remote=$(git config --get "branch.${branch}.remote") || fail "branch ${branch} has no upstream remote"
+merge_ref=$(git config --get "branch.${branch}.merge") || fail "branch ${branch} has no upstream branch"
+
+[[ $remote != "." ]] || fail "the upstream must be a remote repository"
+[[ $merge_ref == refs/heads/* ]] || fail "unsupported upstream ref: ${merge_ref}"
+
+remote_branch=${merge_ref#refs/heads/}
+head_commit=$(git rev-parse HEAD)
+
+module_path() {
+	local module_dir=$1
+	GOWORK=off go -C "$module_dir" list -m -f '{{.Path}}'
+}
+
+required_root_version() {
+	local module_dir=$1
+	GOWORK=off go -C "$module_dir" list -m -f '{{.Version}}' github.com/zohu/zid
+}
+
+[[ $(module_path .) == "github.com/zohu/zid" ]] || fail "unexpected root module path"
+[[ $(module_path zidredis) == "github.com/zohu/zid/zidredis" ]] || fail "unexpected zidredis module path"
+[[ $(module_path zidk8s) == "github.com/zohu/zid/zidk8s" ]] || fail "unexpected zidk8s module path"
+
+for module_dir in zidredis zidk8s; do
+	dependency_version=$(required_root_version "$module_dir")
+	[[ $dependency_version == "$version" ]] || fail "${module_dir}/go.mod requires github.com/zohu/zid ${dependency_version}; expected ${version}"
+done
+
+tags=(
+	"$version"
+	"zidredis/$version"
+	"zidk8s/$version"
+)
+
+for tag in "${tags[@]}"; do
+	if git show-ref --verify --quiet "refs/tags/$tag"; then
+		[[ $(git cat-file -t "$tag") == "tag" ]] || fail "local tag ${tag} must be annotated"
+		[[ $(git rev-list -n 1 "$tag") == "$head_commit" ]] || fail "local tag ${tag} points to another commit"
+	fi
+done
+
+printf 'Fetching %s/%s...\n' "$remote" "$remote_branch"
+git fetch --quiet "$remote" "$merge_ref"
+remote_commit=$(git rev-parse FETCH_HEAD)
+git merge-base --is-ancestor "$remote_commit" "$head_commit" || fail "local ${branch} is not a fast-forward of ${remote}/${remote_branch}"
+
+remote_tags=$(git ls-remote --tags "$remote" \
+	"refs/tags/${tags[0]}" \
+	"refs/tags/${tags[1]}" \
+	"refs/tags/${tags[2]}")
+[[ -z $remote_tags ]] || fail "one or more release tags already exist on ${remote}; inspect them before retrying"
+
+verify_module() {
+	local module_dir=$1
+	local label=$2
+
+	printf '\n==> Verifying %s\n' "$label"
+	GOWORK=off go -C "$module_dir" mod tidy -diff
+	GOWORK=off go -C "$module_dir" vet ./...
+	GOWORK=off go -C "$module_dir" test -race -count=1 ./...
+}
+
+verify_module . zid
+verify_module zidredis zidredis
+verify_module zidk8s zidk8s
+
+status=$(git status --porcelain=v1 --untracked-files=all)
+[[ -z $status ]] || fail "verification changed the working tree; inspect and commit the changes"
+[[ $(git rev-parse HEAD) == "$head_commit" ]] || fail "HEAD changed during verification"
+
+printf '\n==> Creating release tags on %s\n' "$head_commit"
+for tag in "${tags[@]}"; do
+	if ! git show-ref --verify --quiet "refs/tags/$tag"; then
+		git tag -a "$tag" -m "Release $tag"
+	fi
+	printf '  %s\n' "$tag"
+done
+
+printf '\n==> Atomically pushing %s and all release tags to %s\n' "$branch" "$remote"
+git push --atomic "$remote" \
+	"HEAD:refs/heads/$remote_branch" \
+	"refs/tags/${tags[0]}:refs/tags/${tags[0]}" \
+	"refs/tags/${tags[1]}:refs/tags/${tags[1]}" \
+	"refs/tags/${tags[2]}:refs/tags/${tags[2]}"
+
+printf '\nReleased %s from %s.\n' "$version" "$head_commit"

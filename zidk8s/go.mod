@@ -1,9 +1,9 @@
-module zidk8s
+module github.com/zohu/zid/zidk8s
 
 go 1.25
 
 require (
-	github.com/zohu/zid v0.0.3
+	github.com/zohu/zid v0.1.0
 	k8s.io/api v0.34.1
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
@@ -48,3 +48,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+replace github.com/zohu/zid => ..

@@ -1,86 +1,125 @@
 package zid
 
 import (
+	"errors"
 	"fmt"
-	"reflect"
-	"strconv"
-	"time"
+	"math"
 )
 
-type ISnowflake interface {
-	NextId() int64
-	ExtractTime(int64) time.Time
-	ExtractWorkerId(id int64) int64
-}
+const (
+	defaultWorkerIDBits = uint8(4)
+	defaultSequenceBits = uint8(18)
+	maxLayoutBits       = uint8(22)
+	maxShardBits        = uint8(16)
+	// DefaultBaseTime is 2026-08-01 00:00:00 UTC in Unix milliseconds.
+	DefaultBaseTime = int64(1785542400000)
+)
+
+var (
+	ErrClosed = errors.New("zid: generator is closed")
+)
+
+// Options defines the immutable bit layout of a Generator.
+//
+// The zero value is valid and uses DefaultOptions. Set DisableWorkerID when a
+// process-local generator should spend no bits on a worker ID. ShardBits adds
+// local shards without consuming the WorkerID namespace.
 type Options struct {
-	BaseTime          int64  // 基础时间（ms单位），不能超过当前系统时间
-	WorkerId          int64  // 机器码，最大值 2^WorkerIdBitLength-1
-	WorkerIdBitLength byte   // 机器码位长，默认值4，取值范围 [1~19,f]（要求：序列数位长+机器码位长不超过22）
-	SeqBitLength      byte   // 序列数位长，默认值6，取值范围 [3~21,22]（要求：序列数位长+机器码位长不超过22）
-	MaxSeqNumber      uint32 // 最大序列数（含），设置范围 [MinSeqNumber, 2^SeqBitLength-1]，默认值0，表示最大序列数取最大值（2^SeqBitLength-1]）
-	MinSeqNumber      uint32 // 最小序列数（含），默认值5，取值范围 [5, MaxSeqNumber]，每毫秒的前5个序列数对应编号0-4是保留位，其中1-4是时间回拨相应预留位，0是手工新值预留位
-	TopOverCostCount  uint32 // 最大漂移次数（含），默认2000，推荐范围500-10000（与计算能力有关）
-	ShardedMode       bool   // 单机高性能模式，默认false，如果开启，WorkerId将被忽略，WorkerIdBitLength用来控制分片量
+	BaseTime        int64
+	WorkerID        uint32
+	WorkerIDBits    uint8
+	ShardBits       uint8
+	SequenceBits    uint8
+	DisableWorkerID bool
 }
 
-func (o *Options) Validate() error {
-	baseTime := time.Date(2025, 10, 1, 0, 0, 0, 0, time.UTC).UnixMilli()
-	o.BaseTime = firstTruth(o.BaseTime, baseTime)
-	o.WorkerIdBitLength = firstTruth(o.WorkerIdBitLength, 4)
-	o.SeqBitLength = firstTruth(o.SeqBitLength, 6)
-	o.MinSeqNumber = firstTruth(o.MinSeqNumber, 5)
-	o.TopOverCostCount = firstTruth(o.TopOverCostCount, 2000)
-
-	if o.WorkerIdBitLength == 'f' {
-		o.WorkerIdBitLength = 0
-		o.WorkerId = 0
-		o.ShardedMode = false
+// DefaultOptions returns the recommended high-throughput single-generator
+// layout: 16 workers and 262,144 IDs per millisecond per worker.
+func DefaultOptions() Options {
+	return Options{
+		BaseTime:     DefaultBaseTime,
+		WorkerIDBits: defaultWorkerIDBits,
+		SequenceBits: defaultSequenceBits,
 	}
-
-	if o.BaseTime < baseTime || o.BaseTime > time.Now().UnixMilli() {
-		return fmt.Errorf("BaseTime range:[2025-01-01 ~ now]")
-	}
-	if o.WorkerIdBitLength < 0 || o.WorkerIdBitLength > 19 {
-		return fmt.Errorf("WorkerIdBitLength range:[1~19,f]")
-	}
-	if o.WorkerIdBitLength+o.SeqBitLength > 22 {
-		return fmt.Errorf("WorkerIdBitLength + SeqBitLength <= 22")
-	}
-	maxWorkerIdNumber := o.MaxWorkerIdNumber()
-	if o.WorkerId < 0 || o.WorkerId > maxWorkerIdNumber {
-		return fmt.Errorf("WorkerId range:[0, %s]", strconv.FormatUint(uint64(maxWorkerIdNumber), 10))
-	}
-	if o.SeqBitLength < 3 || o.SeqBitLength > 22 {
-		return fmt.Errorf("SeqBitLength range:[3~21,22]")
-	}
-	maxSeqNumber := o.maxSeqNumber()
-	if o.MaxSeqNumber < 0 || o.MaxSeqNumber > maxSeqNumber {
-		return fmt.Errorf("MaxSeqNumber range:[1, %s]", strconv.FormatUint(uint64(maxSeqNumber), 10))
-	}
-	if o.MinSeqNumber < 5 || o.MinSeqNumber > maxSeqNumber {
-		return fmt.Errorf("MinSeqNumber range:[5, %s]", strconv.FormatUint(uint64(maxSeqNumber), 10))
-	}
-	if o.TopOverCostCount < 0 || o.TopOverCostCount > 10000 {
-		return fmt.Errorf("TopOverCostCount range:[0, 10000]")
-	}
-	return nil
 }
 
-func (o *Options) timeShift() byte {
-	return o.WorkerIdBitLength + o.SeqBitLength
+type config struct {
+	baseTime       int64
+	workerID       uint32
+	workerIDBits   uint8
+	shardBits      uint8
+	sequenceBits   uint8
+	timestampShift uint8
+	maxWorkerID    uint32
+	maxSequence    uint32
+	shardCount     uint32
 }
 
-func (o *Options) MaxWorkerIdNumber() int64 {
-	return int64(1<<o.WorkerIdBitLength) - 1
-}
-func (o *Options) maxSeqNumber() uint32 {
-	return uint32(1<<o.SeqBitLength) - 1
-}
-func firstTruth[T any](args ...T) T {
-	for _, item := range args {
-		if !reflect.ValueOf(item).IsZero() {
-			return item
+func normalizeOptions(options Options, now int64) (config, error) {
+	if options == (Options{}) {
+		options = DefaultOptions()
+	} else {
+		if options.BaseTime == 0 {
+			options.BaseTime = DefaultBaseTime
+		}
+		if options.SequenceBits == 0 {
+			options.SequenceBits = defaultSequenceBits
+		}
+		if options.DisableWorkerID && (options.WorkerID != 0 || options.WorkerIDBits != 0) {
+			return config{}, errors.New("zid: DisableWorkerID cannot be combined with WorkerID or WorkerIDBits")
+		}
+		if options.DisableWorkerID {
+			options.WorkerID = 0
+			options.WorkerIDBits = 0
+		} else if options.WorkerIDBits == 0 {
+			options.WorkerIDBits = defaultWorkerIDBits
 		}
 	}
-	return args[0]
+
+	if options.BaseTime <= 0 || options.BaseTime > now {
+		return config{}, fmt.Errorf("zid: BaseTime must be in (0, now], got %d", options.BaseTime)
+	}
+	if options.WorkerIDBits > 19 {
+		return config{}, fmt.Errorf("zid: WorkerIDBits must be between 0 and 19, got %d", options.WorkerIDBits)
+	}
+	if options.ShardBits > maxShardBits {
+		return config{}, fmt.Errorf("zid: ShardBits must be between 0 and %d, got %d", maxShardBits, options.ShardBits)
+	}
+	if options.SequenceBits < 3 || options.SequenceBits > maxLayoutBits {
+		return config{}, fmt.Errorf("zid: SequenceBits must be between 3 and %d, got %d", maxLayoutBits, options.SequenceBits)
+	}
+
+	layoutBits := options.WorkerIDBits + options.ShardBits + options.SequenceBits
+	if layoutBits > maxLayoutBits {
+		return config{}, fmt.Errorf("zid: WorkerIDBits + ShardBits + SequenceBits must be <= %d, got %d", maxLayoutBits, layoutBits)
+	}
+
+	maxWorkerID := bitMask(options.WorkerIDBits)
+	if options.WorkerID > maxWorkerID {
+		return config{}, fmt.Errorf("zid: WorkerID must be <= %d, got %d", maxWorkerID, options.WorkerID)
+	}
+
+	maxTick := int64(math.MaxInt64 >> layoutBits)
+	if now-options.BaseTime > maxTick {
+		return config{}, errors.New("zid: BaseTime and bit layout have exhausted the signed int64 timestamp range")
+	}
+
+	return config{
+		baseTime:       options.BaseTime,
+		workerID:       options.WorkerID,
+		workerIDBits:   options.WorkerIDBits,
+		shardBits:      options.ShardBits,
+		sequenceBits:   options.SequenceBits,
+		timestampShift: layoutBits,
+		maxWorkerID:    maxWorkerID,
+		maxSequence:    bitMask(options.SequenceBits),
+		shardCount:     uint32(1) << options.ShardBits,
+	}, nil
+}
+
+func bitMask(bits uint8) uint32 {
+	if bits == 0 {
+		return 0
+	}
+	return uint32(1)<<bits - 1
 }

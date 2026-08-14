@@ -3,6 +3,7 @@ package zid
 import (
 	"errors"
 	"fmt"
+	"math"
 )
 
 const base62Chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -10,37 +11,30 @@ const base62Chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVW
 var base62Map [256]int8
 
 func init() {
-	for i := 0; i < len(base62Chars); i++ {
-		c := base62Chars[i]
-		base62Map[c] = int8(i)
+	for index := range base62Map {
+		base62Map[index] = -1
+	}
+	for index := range len(base62Chars) {
+    base62Map[base62Chars[index]] = int8(index)
 	}
 }
 
-func fromBase62(s string) (int64, error) {
-	if s == "" {
-		return 0, errors.New("empty string")
+func fromBase62(value string) (int64, error) {
+	if value == "" {
+		return 0, errors.New("zid: empty base-62 ID")
 	}
 
-	var result int64 = 0
-	const maxInt64 = 1<<63 - 1 // 9223372036854775807
-
-	for _, c := range s {
-		if c >= 256 {
-			return 0, fmt.Errorf("invalid character: %c", c)
+	var result int64
+	for _, character := range value {
+		if character >= 256 || base62Map[character] < 0 {
+			return 0, fmt.Errorf("zid: invalid base-62 character %q", character)
 		}
-		val := base62Map[c]
-		if val < 0 {
-			return 0, fmt.Errorf("invalid base62 character: %c", c)
+		digit := int64(base62Map[character])
+		if result > (math.MaxInt64-digit)/62 {
+			return 0, errors.New("zid: base-62 ID exceeds int64")
 		}
-
-		// 检查溢出：result * 62 + val > maxInt64 ?
-		if result > (maxInt64-int64(val))/62 {
-			return 0, errors.New("value overflow: exceeds int64 max")
-		}
-
-		result = result*62 + int64(val)
+		result = result*62 + digit
 	}
-
 	return result, nil
 }
 
@@ -48,13 +42,16 @@ func toBase62(id int64) string {
 	if id == 0 {
 		return "0"
 	}
-	buf := make([]byte, 0, 11)
+	if id < 0 {
+		panic("zid: ID must not be negative")
+	}
+
+	var buffer [11]byte
+	position := len(buffer)
 	for id > 0 {
-		buf = append(buf, base62Chars[id%62])
+		position--
+		buffer[position] = base62Chars[id%62]
 		id /= 62
 	}
-	for i, j := 0, len(buf)-1; i < j; i, j = i+1, j-1 {
-		buf[i], buf[j] = buf[j], buf[i]
-	}
-	return string(buf)
+	return string(buffer[position:])
 }
